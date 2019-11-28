@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 
-import requests
-import json
-import datetime
-import time
-import sys
-import codecs
 import argparse
-import yaml
-import os
+import codecs
+import time
 
+from config import config
+from korreksjonssett import korreksjon
 from login import login
 
 # nvdb_id, versjon, gatekode, kommune, navn
@@ -23,92 +19,6 @@ parser.add_argument("-config", "-c", required=True)
 
 nvdb_typeid = 538
 nvdb_propertyid_gatenavn = 4589
-url_list = []
-
-
-def last_config_fil(config_file):
-    if config_file:
-        if not os.path.exists(config_file):
-            # log.error("Config file was not found..")
-            sys.exit(1)
-        try:
-            with open(config_file, 'r') as f:
-                cfg = yaml.load(f, Loader=yaml.BaseLoader)
-        except yaml.scanner.ScannerError as se:
-            sys.exit(1)
-
-    return cfg
-
-
-class Korreksjon:
-    def __init__(self, config, auth, kommune, date='', datakatalogversjon="2.10"):
-        self.payload = {
-            'delvisKorriger': {
-                'vegObjekter': []
-            },
-            'effektDato': date or datetime.datetime.now().date().isoformat(),
-            'datakatalogversjon': datakatalogversjon
-        }
-        self.headers = {'content-type': 'application/json', 'Accept': 'application/json', 'X-Client': 'Gatenavnimport'}
-        self.cookies = auth
-
-        self.url = config.get('skriv_url')
-        self.les = config.get('les_template')
-        self.fremdrift = None
-        self.uri = None
-        self.kommune_nr = kommune
-        print("Oppretter korreksjoner for {}".format(kommune))
-
-
-    def sjekk_objektforekomst(self, nvdb_id, versjon):
-        lurl = self.les.format(nvdb_typeid, nvdb_id, versjon)
-        tr = requests.get(lurl, cookies=self.cookies)
-        print(tr.status_code, lurl)
-        return tr.status_code == 200
-
-    def add_navne_korreksjon(self, nvdb_id, versjon, gatenavn):
-        if self.sjekk_objektforekomst(nvdb_id, versjon):
-            objekt = {
-                "typeId": nvdb_typeid,
-                "nvdbId": nvdb_id,
-                "versjon": versjon,
-                "egenskaper": [{
-                    'typeId': nvdb_propertyid_gatenavn,
-                    'verdi': [gatenavn],
-                    'operasjon': "oppdater"
-                }]
-            }
-            self.payload.get('delvisKorriger').get('vegObjekter').append(objekt)
-
-    def post(self):
-
-        r = requests.post(self.url, cookies=self.cookies, data=json.dumps(self.payload), headers=self.headers)
-
-        with open('drit.json', 'w') as debugjson:
-            debugjson.write(json.dumps(self.payload))
-
-        print(r.url)
-        print(r.status_code)
-        print(r.encoding)
-
-        self.uri = r.json()[0].get('src')
-        url_list.append(self.uri)
-
-    def start(self):
-        if self.uri:
-            r = requests.post(self.uri + '/start', cookies=self.cookies)
-            print(r.status_code)
-
-    def json(self):
-        print(json.dumps(self.payload))
-
-    def poll(self):
-        if self.uri:
-            r = requests.get(self.uri + '/fremdrift', cookies=self.cookies, headers=self.headers)
-            return r.text
-
-    def skriv(self):
-        print(self.kommune_nr, len(self.payload.get('delvisKorriger').get('vegObjekter')))
 
 
 def les_navnekorreksjoner(filnavn, config, auth):
@@ -119,18 +29,19 @@ def les_navnekorreksjoner(filnavn, config, auth):
             try:
                 nid, vid, gk, kom, navn = line.strip().split(',', 4)
                 if kom not in korreksjonssett_per_kommune.keys():
-                    korreksjonssett_per_kommune[kom] = Korreksjon(config, auth, kom)
+                    korreksjonssett_per_kommune[kom] = korreksjon.Korreksjon(config, auth, kom)
                 korr = korreksjonssett_per_kommune.get(kom)
                 korr.add_navne_korreksjon(nid, vid, navn)
-            except:
-                print("err:", line)
-                
+            except Exception as ex:
+                print("err:", line.strip())
+                print(ex)
+
     return korreksjonssett_per_kommune
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    cfg = last_config_fil(args.config)
+    cfg = config.last_config_fil(args.config)
 
     auth_cookie = login.get_token(cfg.get('auth'), 'terbra')
     t_start = time.time()
