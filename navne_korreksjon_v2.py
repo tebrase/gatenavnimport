@@ -16,6 +16,7 @@ from login import login
 # 2099991,1,1001,0536,Hasselvegen
 # 2099992,1,1002,0536,Klinkenbergvegen
 
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-gatenavnfil", "-f", required=True)
 parser.add_argument("-config", "-c", required=True)
@@ -40,7 +41,7 @@ def last_config_fil(config_file):
 
 
 class Korreksjon:
-    def __init__(self, config, auth, date='', datakatalogversjon="2.10"):
+    def __init__(self, config, auth, kommune, date='', datakatalogversjon="2.10"):
         self.payload = {
             'delvisKorriger': {
                 'vegObjekter': []
@@ -50,9 +51,14 @@ class Korreksjon:
         }
         self.headers = {'content-type': 'application/json', 'Accept': 'application/json', 'X-Client': 'Gatenavnimport'}
         self.cookies = auth
-        print(self.cookies)
+
         self.url = config.get('skriv_url')
         self.les = config.get('les_template')
+        self.fremdrift = None
+        self.uri = None
+        self.kommune_nr = kommune
+        print("Oppretter korreksjoner for {}".format(kommune))
+
 
     def sjekk_objektforekomst(self, nvdb_id, versjon):
         lurl = self.les.format(nvdb_typeid, nvdb_id, versjon)
@@ -101,25 +107,25 @@ class Korreksjon:
             r = requests.get(self.uri + '/fremdrift', cookies=self.cookies, headers=self.headers)
             return r.text
 
+    def skriv(self):
+        print(self.kommune_nr, len(self.payload.get('delvisKorriger').get('vegObjekter')))
+
 
 def les_navnekorreksjoner(filnavn, config, auth):
+    korreksjonssett_per_kommune = {}
+
     with codecs.open(filnavn, 'r', encoding='utf8') as f:
-        i = 0
-        korr = Korreksjon(config, auth)
         for line in f:
             try:
                 nid, vid, gk, kom, navn = line.strip().split(',', 4)
+                if kom not in korreksjonssett_per_kommune.keys():
+                    korreksjonssett_per_kommune[kom] = Korreksjon(config, auth, kom)
+                korr = korreksjonssett_per_kommune.get(kom)
                 korr.add_navne_korreksjon(nid, vid, navn)
-                posted = False
             except:
                 print("err:", line)
-            i = i + 1
-            if i % 202 == 0:
-                korr.post()
-                korr = Korreksjon(config, auth)
-                posted = True
-        if not posted:
-            korr.post()
+                
+    return korreksjonssett_per_kommune
 
 
 if __name__ == "__main__":
@@ -131,9 +137,12 @@ if __name__ == "__main__":
 
     filnavn = args.gatenavnfil
 
-    les_navnekorreksjoner(filnavn, cfg.get('skriv'), auth_cookie)
-    with open('jobs.json', 'w') as fp:
-        json.dump(url_list, fp)
+    endringssett = les_navnekorreksjoner(filnavn, cfg.get('skriv'), auth_cookie)
+    for kommune, korreksjoner in endringssett.items():
+        korreksjoner.skriv()
+
+    # with open('jobs.json', 'w') as fp:
+    #    json.dump(url_list, fp)
 
     t_stop = time.time()
     print("post time: {}".format(t_stop - t_start))
