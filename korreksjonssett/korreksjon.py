@@ -17,11 +17,11 @@ class Korreksjon:
         self.cookies = auth
         self.nvdb_type_id = typeid
         self.nvdb_property_id = propertyid
-        self.url = config.get('skriv_url')
+        self.skriv_url = config.get('skriv_url')
         self.les = config.get('les_template')
         self.fremdrift = None
         self.uri = None
-        self.kommune_nr = label
+        self.label = label
         print("Oppretter korreksjoner for {}".format(label))
 
     def sjekk_objektforekomst(self, nvdb_id, versjon):
@@ -45,32 +45,36 @@ class Korreksjon:
             self.payload.get('delvisKorriger').get('vegObjekter').append(objekt)
 
     def post(self):
+        r = requests.post(self.skriv_url, cookies=self.cookies, data=json.dumps(self.payload), headers=self.headers)
+        print("posting: ", self.label, r.status_code, r.url)
 
-        r = requests.post(self.url, cookies=self.cookies, data=json.dumps(self.payload), headers=self.headers)
-
-        with open('drit.json', 'w') as debugjson:
-            debugjson.write(json.dumps(self.payload))
-
-        print(r.url)
-        print(r.status_code)
-        print(r.encoding)
         if r.status_code == 201:
             self.uri = r.json()[0].get('src')
             self.fremdrift = "POSTED"
+        else:
+            self.fremdrift = "FAILED POST"
 
     def start(self):
-        if self.uri:
+        if self.uri and (self.fremdrift in ["POSTED", "IKKE STARTET"]):
             r = requests.post(self.uri + '/start', cookies=self.cookies)
-            if r.status_code == 201:
+            print("starting: ", self.label, r.status_code)
+
+            if r.status_code == 202:
                 self.fremdrift = "STARTED"
+            else:
+                self.fremdrift = "FAILED START"
 
     def json(self):
         print(json.dumps(self.payload))
 
     def poll(self):
-        if self.uri:
-            r = requests.get(self.uri + '/fremdrift', cookies=self.cookies, headers=self.headers)
-            self.fremdrift == r.text
+        if self.fremdrift not in ["UTFØRT", "AVVIST"]:
+            if self.uri:
+                r = requests.get(self.uri + '/fremdrift', cookies=self.cookies, headers=self.headers)
+                self.fremdrift = r.text.replace('"', '')
+                print("polled :", self.label, self.fremdrift)
+            else:
+                self.fremdrift = "FAILED POLL"
 
     def skriv(self):
-        print(self.kommune_nr, len(self.payload.get('delvisKorriger').get('vegObjekter')), self.fremdrift)
+        print(self.label, len(self.payload.get('delvisKorriger').get('vegObjekter')), self.fremdrift)

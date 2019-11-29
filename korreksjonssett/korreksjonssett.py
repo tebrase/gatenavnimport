@@ -22,10 +22,19 @@ class Korreksjonssett:
             korreksjon.skriv()
 
     def post_and_start(self):
-        pass
+        for label, korreksjon in self.korreksjoner.items():
+            korreksjon.post()
+            korreksjon.start()
 
-    def poll(self):
-        pass
+    def start(self):
+        for label, korreksjon in self.korreksjoner.items():
+            korreksjon.start()
+
+    def poll(self, force_start=False):
+        for label, korreksjon in self.korreksjoner.items():
+            if force_start:
+                korreksjon.start()
+            korreksjon.poll()
 
     def store(self, filename="jobs.p"):
         with open(filename, "wb") as outfile:

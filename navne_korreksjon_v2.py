@@ -46,6 +46,7 @@ if __name__ == "__main__":
     filnavn = args.gatenavnfil
 
     korreksjonssett = les_navnekorreksjoner(filnavn, cfg.get('skriv'), auth_cookie)
+    korreksjonssett.post_and_start()
     korreksjonssett.list_korreksjoner()
     korreksjonssett.store()
 
