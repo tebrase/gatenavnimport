@@ -4,7 +4,7 @@ import json
 
 
 class Korreksjon:
-    def __init__(self, config, auth, kommune, date='', datakatalogversjon="2.10", typeid=538, propertyid=4589):
+    def __init__(self, config, auth, label, typeid, propertyid, date='', datakatalogversjon="2.18"):
         self.payload = {
             'delvisKorriger': {
                 'vegObjekter': []
@@ -21,8 +21,8 @@ class Korreksjon:
         self.les = config.get('les_template')
         self.fremdrift = None
         self.uri = None
-        self.kommune_nr = kommune
-        print("Oppretter korreksjoner for {}".format(kommune))
+        self.kommune_nr = label
+        print("Oppretter korreksjoner for {}".format(label))
 
     def sjekk_objektforekomst(self, nvdb_id, versjon):
         lurl = self.les.format(self.nvdb_type_id, nvdb_id, versjon)
@@ -30,7 +30,7 @@ class Korreksjon:
         print(tr.status_code, lurl)
         return tr.status_code == 200
 
-    def add_navne_korreksjon(self, nvdb_id, versjon, gatenavn):
+    def add_korreksjon(self, nvdb_id, versjon, verdi):
         if self.sjekk_objektforekomst(nvdb_id, versjon):
             objekt = {
                 "typeId": self.nvdb_type_id,
@@ -38,7 +38,7 @@ class Korreksjon:
                 "versjon": versjon,
                 "egenskaper": [{
                     'typeId': self.nvdb_property_id,
-                    'verdi': [gatenavn],
+                    'verdi': [verdi],
                     'operasjon': "oppdater"
                 }]
             }

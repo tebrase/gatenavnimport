@@ -5,7 +5,7 @@ import codecs
 import time
 
 from config import config
-from korreksjonssett import korreksjon
+from korreksjonssett import korreksjon, korreksjonssett
 from login import login
 
 # nvdb_id, versjon, gatekode, kommune, navn
@@ -22,16 +22,13 @@ nvdb_propertyid_gatenavn = 4589
 
 
 def les_navnekorreksjoner(filnavn, config, auth):
-    korreksjonssett_per_kommune = {}
+    korreksjonssett_per_kommune = korreksjonssett.Korreksjonssett(config, auth, nvdb_typeid, nvdb_propertyid_gatenavn)
 
     with codecs.open(filnavn, 'r', encoding='utf8') as f:
         for line in f:
             try:
                 nid, vid, gk, kom, navn = line.strip().split(',', 4)
-                if kom not in korreksjonssett_per_kommune.keys():
-                    korreksjonssett_per_kommune[kom] = korreksjon.Korreksjon(config, auth, kom)
-                korr = korreksjonssett_per_kommune.get(kom)
-                korr.add_navne_korreksjon(nid, vid, navn)
+                korreksjonssett_per_kommune.legg_til_korreksjon(kom, nid, vid, navn)
             except Exception as ex:
                 print("err:", line.strip())
                 print(ex)
@@ -48,9 +45,9 @@ if __name__ == "__main__":
 
     filnavn = args.gatenavnfil
 
-    endringssett = les_navnekorreksjoner(filnavn, cfg.get('skriv'), auth_cookie)
-    for kommune, korreksjoner in endringssett.items():
-        korreksjoner.skriv()
+    korreksjonssett = les_navnekorreksjoner(filnavn, cfg.get('skriv'), auth_cookie)
+    korreksjonssett.list_korreksjoner()
+    korreksjonssett.store()
 
     # with open('jobs.json', 'w') as fp:
     #    json.dump(url_list, fp)
