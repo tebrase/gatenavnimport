@@ -3,6 +3,7 @@
 import argparse
 import codecs
 import time
+import traceback
 
 from config import config
 from korreksjonssett import korreksjon, korreksjonssett
@@ -16,13 +17,16 @@ from login import login
 parser = argparse.ArgumentParser()
 parser.add_argument("-gatenavnfil", "-f", required=True)
 parser.add_argument("-config", "-c", required=True)
+parser.add_argument("-read_timestamp", "-t", required=True)
+
 
 nvdb_typeid = 538
 nvdb_propertyid_gatenavn = 4589
 
 
-def les_navnekorreksjoner(filnavn, config, auth):
-    korreksjonssett_per_kommune = korreksjonssett.Korreksjonssett(config, auth, nvdb_typeid, nvdb_propertyid_gatenavn)
+def les_navnekorreksjoner(filnavn, config, auth, read_timestamp):
+
+    korreksjonssett_per_kommune = korreksjonssett.Korreksjonssett(config, auth, nvdb_typeid, nvdb_propertyid_gatenavn, read_timestamp)
 
     with codecs.open(filnavn, 'r', encoding='utf8') as f:
         for line in f:
@@ -31,8 +35,7 @@ def les_navnekorreksjoner(filnavn, config, auth):
                 korreksjonssett_per_kommune.legg_til_korreksjon(kom, nid, vid, navn)
             except Exception as ex:
                 print("err:", line.strip())
-                print(ex)
-
+                traceback.print_exc()
     return korreksjonssett_per_kommune
 
 
@@ -45,7 +48,7 @@ if __name__ == "__main__":
 
     filnavn = args.gatenavnfil
 
-    korreksjonssett = les_navnekorreksjoner(filnavn, cfg.get('skriv'), auth_cookie)
+    korreksjonssett = les_navnekorreksjoner(filnavn, cfg.get('skriv'), auth_cookie, args.read_timestamp)
     korreksjonssett.post_and_start()
     korreksjonssett.list_korreksjoner()
     korreksjonssett.store()
