@@ -47,7 +47,7 @@ def get_token(auth_config, user):
     except Exception:
         auth_state = None
 
-    auth_url = auth_config.get('login_url')
+    auth_url = auth_config.get('url_login')
 
     if not auth_state:
         return logg_inn(auth_url, user)

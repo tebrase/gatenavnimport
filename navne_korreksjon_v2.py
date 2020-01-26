@@ -2,11 +2,10 @@
 
 import argparse
 import codecs
-import time
 import traceback
 
 from config import config
-from korreksjonssett import korreksjon, korreksjonssett
+from korreksjonssett import korreksjonssett, endringssett
 from login import login
 
 # nvdb_id, versjon, gatekode, kommune, navn
@@ -41,20 +40,17 @@ def les_navnekorreksjoner(filnavn, config, auth, read_timestamp):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    cfg = config.last_config_fil(args.config)
+    cfg = config.Config(args.config)
 
-    auth_cookie = login.get_token(cfg.get('auth'), 'terbra')
-    t_start = time.time()
-
+    auth_cookie = login.get_token(cfg.get_module('auth'), 'terbra')
     filnavn = args.gatenavnfil
 
-    korreksjonssett = les_navnekorreksjoner(filnavn, cfg.get('skriv'), auth_cookie, args.read_timestamp)
+    korreksjonssett = les_navnekorreksjoner(filnavn, cfg, auth_cookie, args.read_timestamp)
     korreksjonssett.post_and_start()
-    korreksjonssett.list_korreksjoner()
+    korreksjonssett.list_endringssett()
     korreksjonssett.store()
 
     # with open('jobs.json', 'w') as fp:
     #    json.dump(url_list, fp)
 
-    t_stop = time.time()
-    print("post time: {}".format(t_stop - t_start))
+ 

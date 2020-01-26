@@ -9,25 +9,82 @@ import io
 import codecs
 import argparse
 
-
-
 from clint.textui import progress
+from config import config
 
-
-url = 'https://www.vegvesen.no/nvdb/api/v2/vegobjekter/538.json?inkluder=lokasjon,metadata,egenskaper&inkludergeometri=ingen&antall=10000'
-#url_test = 'https://www.test.vegvesen.no/nvdb/api/v2/vegobjekter/538.json?inkluder=lokasjon,metadata,egenskaper&inkludergeometri=ingen&antall=10000'
 
 nvdb_gater = {}
+gater_uten_lokasjon = {}
 total_count = 0
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-gatenavnfil", "-f", required=True)
 parser.add_argument("-utfilnavn", "-u", required=True)
+parser.add_argument("-config", "-c", required=True)
 parser.add_argument("-apigatefil", "-a")
 
+
 def skriv_apistatus():
-    status = requests.get("https://www.vegvesen.no/nvdb/api/v2/status").json()
+    status = requests.get(cfg.get('gate', 'url_status')).json()
     print(status.get('datagrunnlag'))
+
+
+def loggoppsett():
+    logger = logging.getLogger(cfg.get('log', 'loggnavn'))
+    log_filehandler = logging.FileHandler(cfg.get('log', 'loggfilnavn'))
+    log_formatter = logging.Formatter(cfg.get('log', 'loggformat'))
+    log_filehandler.setFormatter(log_formatter)
+    logger.addHandler(log_filehandler)
+    logger.setLevel(logging.INFO)
+    return logger
+
+
+def hent_kommunenr(nvdbid):
+    kommuneurl = cfg.get('gate', 'url_template_kommune').format(cfg.get('gate','kommune_typeid'), nvdbid)
+    print(kommuneurl)
+    data = requests.get(kommuneurl).json()
+    for e in data.get('egenskaper', []):
+        if e.get('navn') == 'Kommunenummer':
+            return e.get('verdi')
+    return None
+
+def hent_kommune_fra_relasjon(nvdbid):
+    url = cfg.get('gate','url_template_enkeltgate').format(nvdbid)
+    data = requests.get(url).json()
+    print(url)
+    barn = data.get('relasjoner', {}).get('barn', [])
+    for b in barn:
+        if b.get('type', {}).get('id', None) == int(cfg.get('gate','kommune_typeid')):
+            kommune_objekter = b.get('vegobjekter', [])
+            if len(kommune_objekter) > 0:
+                return hent_kommunenr(kommune_objekter[0])
+            else:
+                return None
+
+
+def legg_til_gate_uten_sted(gate):
+    global gater_uten_lokasjon
+    kommunenr = hent_kommune_fra_relasjon(gate['id'])
+    if kommunenr is None:
+        kommunenr = 'Ukjent'
+    if kommunenr not in gater_uten_lokasjon.keys():
+        gater_uten_lokasjon[kommunenr] = {}
+
+    kommune_gater = gater_uten_lokasjon[kommunenr]
+    if gate['kode'] not in kommune_gater.keys():
+        kommune_gater[gate['kode']] = []
+
+    kommune_gater_kode = kommune_gater[gate['kode']]
+
+    gate_objekt = {
+        'nvdbid': gate['id'],
+        'versjon': gate['versjon'],
+        'gatenavn': gate.get('navn', None)
+    }
+
+    kommune_gater_kode.append(gate_objekt)
+
 
 
 def behandle(objekter):
@@ -37,18 +94,21 @@ def behandle(objekter):
         gate['id'] = o.get('id', None)
         gate['versjon'] = o['metadata']['versjon']
         k = o['lokasjon'].get('kommuner', [])
+        for e in o['egenskaper']:
+            if e['navn'] == 'Gatekode':
+                gate['kode'] = e['verdi']
+            if e['navn'] == 'Gatenavn':
+                gate['navn'] = e['verdi'].strip()
+
         if k:
             gate['kommune'] = "{:04}".format(k[0])
-            for e in o['egenskaper']:
-                if e['navn'] == 'Gatekode':
-                    gate['kode'] = e['verdi']
-                if e['navn'] == 'Gatenavn':
-                    gate['navn'] = e['verdi'].strip()
+
             if not nvdb_gater.get(gate['kommune']):
                 nvdb_gater[gate['kommune']] = [gate]
             else:
                 nvdb_gater[gate['kommune']].append(gate)
         else:
+            #legg_til_gate_uten_sted(gate)
             log.info("Gate uten stedfesting: {} ({})".format(gate['id'], gate['versjon']))
 
         total_count = total_count + 1
@@ -64,8 +124,8 @@ def hent(url):
 
 def hent_nvdb_gater(bar):
     bar.label = "Laster ned... "
-    antall = requests.get("https://www.vegvesen.no/nvdb/api/v2/vegobjekter/538/statistikk.json").json().get('antall')
-    neste = url  
+    antall = requests.get(cfg.get('gate', 'url_statistikk')).json().get('antall')
+    neste = cfg.get('gate', 'url_gater') 
     forrige = ''
     while neste != forrige:
         forrige = neste
@@ -123,15 +183,11 @@ def compare_too(bar, utfilnavn="forslag_test.txt"):
 
 
 if __name__ == "__main__":
-    log = logging.getLogger("Gatecrawler")
-    log_filehandler = logging.FileHandler("gatecrawl.log")
-    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    log_filehandler.setFormatter(log_formatter)
-    log.addHandler(log_filehandler)
-    log.setLevel(logging.INFO)
     args = parser.parse_args()
-    print (args.gatenavnfil, " -> ", args.utfilnavn)
+    cfg = config.Config(args.config)
+    log = loggoppsett()
 
+    print (args.gatenavnfil, " -> ", args.utfilnavn)
     skriv_apistatus()
 
     with progress.Bar(label="Starter.....", width=100, expected_size=100) as bar:
@@ -144,6 +200,9 @@ if __name__ == "__main__":
         compare_too(bar, args.utfilnavn)
 
     prefix = datetime.date.today().isoformat()
-    gatefilnavn = "{}_NvdbAPIGater.json".format(prefix)
-    with open(gatefilnavn, 'w') as fp:
+    filnavn_allegater = cfg.get('gate', 'filnavn_template_apigater').format(prefix)
+    with open(filnavn_allegater, 'w') as fp:
         json.dump(nvdb_gater, fp)
+    filnavn_utensted = cfg.get('gate', 'filnavn_template_gaterutensted').format(prefix)
+    with open(filnavn_utensted, 'w') as fp:
+        json.dump(gater_uten_lokasjon, fp)
