@@ -160,7 +160,7 @@ def les_matrikkel_gater(gatefil):
 
 
 
-def compare_too(bar, utfilnavn="forslag_test.txt"):
+def lag_forslag(bar, utfilnavn="forslag_test.txt"):
     bar.label = "Sammenlikner... "
     file = codecs.open(utfilnavn, "w", "utf-8")
     count = 0
@@ -197,7 +197,7 @@ if __name__ == "__main__":
         else:
             hent_nvdb_gater(bar)
         matrikkel_gater = les_matrikkel_gater(args.gatenavnfil)
-        compare_too(bar, args.utfilnavn)
+        lag_forslag(bar, args.utfilnavn)
 
     prefix = datetime.date.today().isoformat()
     filnavn_allegater = cfg.get('gate', 'filnavn_template_apigater').format(prefix)
